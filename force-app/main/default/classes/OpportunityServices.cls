@@ -121,7 +121,7 @@ public with sharing class OpportunityServices {
                                 fn = contact.FirstName;
                             }
 
-                            contactTempSociete = createContact(fn + ' ' + contact.LastName, 'Société:'+ oppAccount.Name +', Bénéficiaire :', contact.Email, oppAccountCopro.Id, recordTypeId, oppAccount.BillingStreet, oppAccount.BillingCity, oppAccount.BillingPostalCode, oppAccount.BillingState, oppAccount.BillingCountry, opp.Id, fn + ' ' + contact.LastName);
+                            contactTempSociete = createContact(oppAccount.Name, '', contact.Email, oppAccountCopro.Id, recordTypeId, oppAccount.BillingStreet, oppAccount.BillingCity, oppAccount.BillingPostalCode, oppAccount.BillingState, oppAccount.BillingCountry, opp.Id, fn + ' ' + contact.LastName);
 
                             contacts.add(contactTempSociete);
 
@@ -311,7 +311,7 @@ public with sharing class OpportunityServices {
         list<Task> tskList = new list<Task>();
         for(Opportunity o:newOpps)
         {
-            Task tsk=new Task(Subject='Planifier next steps',WhatId=o.id,ActivityDate = Date.today(),OwnerId = o.OwnerId,Priority = 'Normal');
+            Task tsk=new Task(Subject='Planifier next steps',WhatId=o.id,ActivityDate = Date.today(),OwnerId = o.OwnerId,Priority = 'High',Status='Ouvert');
             tskList.add(tsk);
           
         }
@@ -353,141 +353,47 @@ public with sharing class OpportunityServices {
         map<id,External_Transaction__c> mapExternalTransaction=new map<id,External_Transaction__c>([select Status__c from External_Transaction__c where id in :setExternalTransaction]);
         for(Opportunity o:newOpps)
         {
+            /*Opp - First task*/
+            if(isBefore&&oldOpps==null)
+                o.Offre__c='Ze passe à l\'électrique';
+            
             /*Opp - Fill Agence*/
-                if(isBefore&&String.isEmpty(o.Agence__c)&&accMap.get(o.accountid).RecordTypeId==(recTypeIdMapAcc.get('Copro')))
+                if(isBefore&&String.isEmpty(o.Agence__c)&&!accMap.isEmpty()&&accMap.get(o.accountid).RecordTypeId==(recTypeIdMapAcc.get('Copro')))
                 {
                     
                     o.Agence__c=accMap.get(o.accountid).Agence__c;
                 }   
-            /*Opp - Rename*/
-                if(isBefore&&(o.RecordType.DeveloperName=='Abonnement_Flotte_Copro')||((o.RecordType.DeveloperName=='Abonnement_Flotte_Copro')&&(o.Copro_user__c!=oldOpps.get(o.id).Copro_user__c)))
+            /*Opp - History dates*/
+            	if(isBefore&&o.StageName=='Attente AG')
                 {
-                    String s1='Abo Flotte C - '+accMap.get(o.accountid).Name+' - '+personAccMap.get(o.Copro_user__c).LastName+' '+personAccMap.get(o.Copro_user__c).FirstName;
-                    o.Name=s1.left(80);
+                    
+                    o.Ready__c=o.LastModifiedDate.date();
                 }
-            	if(isBefore&&((o.RecordType.DeveloperName=='Abonnement_Flotte_Copro')||((o.RecordType.DeveloperName=='Abonnement_Flotte_Pavillon')&&(o.Copro_user__c!=oldOpps.get(o.id).Copro_user__c)))&&!o.Projet_VIP__c)
+            	if(isBefore&&o.StageName=='Attente convention')
                 {
-                    String s1='Abo Flotte P - '+accMap.get(o.accountid).Name+' - '+personAccMap.get(o.Copro_user__c).LastName+' '+personAccMap.get(o.Copro_user__c).FirstName;
-                    o.Name=s1.left(80);
+                    
+                    o.Validated__c=o.Date_AG__c;
                 }
-            	if(isBefore&&o.RecordType.DeveloperName=='Promoter_Agreement')
+               /* ** Opp - Auto Fill date AG from docusign ** */
+                if(isBefore&&!String.isEmpty(o.Date_d_AG_For_docusign_text__c))
                 {
-                    String s1='Acp'+' - '+accMap.get(o.Accountid).Name;
-                    o.Name=s1.left(80);
+                    system.debug('OPP DATE AG FROM DOCUSIGN :');
+                    Date mydate = Date.parse(o.Date_d_AG_For_docusign_text__c);
+                    o.Date_AG__c= mydate;
                 }
-            	if(isBefore&&o.RecordType.DeveloperName=='Subscription')
+            /* ** Opp - Attestation Enedis reçue Update Account ** */
+                if(o.Enedis_received__c == true)
                 {
-                    o.Installments__c=true;
+                    system.debug('OPP Attestation Enedis Reçue :' +accMap.get(o.accountid).name);
+                    accMap.get(o.accountid).AttestationEnedisRecueConvention__c = true;
+                     system.debug('OPP Attestation Enedis Reçue check:' +accMap.get(o.accountid).AttestationEnedisRecueConvention__c);
                 }
-            	if(isBefore&&!String.isEmpty(o.Accountid)&&!String.isEmpty(accMap.get(o.accountid).Gestionnaire__c)&&o.RecordType.DeveloperName=='Convention_Copro'&&String.isEmpty(o.GestionnaireCcompte__c))
-                {
-                    o.GestionnaireCcompte__c=accMap.get(o.accountid).Gestionnaire__c;
-                }
-            
-            	if(isBefore&&o.RecordType.DeveloperName=='Devis_Prestations_sur_devis_B2C'&&!o.Projet_VIP__c)
-                {
-                    if(!String.isEmpty(o.Copro_user__c)&&o.RecordType.DeveloperName=='Subscription')
-                    {
-                        String s1=recTypeIdMap.get('Subscription');
-                        String s2=s1.left(3)+' - '+accMap.get(o.accountid).Name+' - '+personAccMap.get(o.Copro_user__c).LastName+' '+personAccMap.get(o.Copro_user__c).FirstName;
-                    	o.Name=s2.left(80);
-                    }
-                    if(isBefore&&String.isEmpty(o.Copro_user__c)&&o.RecordType.DeveloperName=='Subscription')
-                    {
-                        String s1=recTypeIdMap.get('Subscription');
-                        String s2=s1.left(3)+' - '+accMap.get(o.accountid).Name;
-                    	o.Name=s2.left(80);
-                    }
-                    For(id idInstall:instalMap.keySet())//a voir la cardinalite pour supprime le for
-                    {
-                        instalMap.get(idInstall).ProjetVIP__c=false;
-                    }
-                     
-                }
-                if(isBefore&&!o.Projet_VIP__c&&o.RecordType.DeveloperName=='Devis_Prestations_sur_devis_B2C')
-                {
-                    if(!String.isEmpty(o.Copro_user__c)&&o.RecordType.DeveloperName=='Devis_Prestations_sur_devis_B2C')
-                    {       
-                        String s2='Devis B2C - '+' - '+accMap.get(o.accountid).Name+' - '+personAccMap.get(o.Copro_user__c).LastName+' '+personAccMap.get(o.Copro_user__c).FirstName;
-                    	o.Name=s2.left(80);
-                    }
-                    if(String.isEmpty(o.Copro_user__c)&&o.RecordType.DeveloperName=='Devis_Prestations_sur_devis_B2C')
-                    {
-                        String s2='Devis B2C - '+' - '+accMap.get(o.accountid).Name;
-                    	o.Name=s2.left(80);
-                    }
-                    For(id idInstall:instalMap.keySet())//a voir la cardinalite pour supprime le for
-                    {
-                        instalMap.get(idInstall).ProjetVIP__c=false;
-                    }
-                }
-            	if(isBefore&&o.Projet_VIP__c)
-                {
-                    if(!String.isEmpty(o.Copro_user__c)&&o.RecordType.DeveloperName=='Subscription')
-                    {
-                        String s1=recTypeIdMap.get('Subscription');
-                        String s2=s1.left(3)+' - '+accMap.get(o.accountid).Name+' - ⚡ '+personAccMap.get(o.Copro_user__c).LastName+' '+personAccMap.get(o.Copro_user__c).FirstName;
-                    	o.Name=s2.left(80);
-                    }
-                    if(String.isEmpty(o.Copro_user__c)&&o.RecordType.DeveloperName=='Subscription')
-                    {
-                        String s1=recTypeIdMap.get('Subscription');
-                        String s2=s1.left(3)+' - ⚡ '+accMap.get(o.accountid).Name;
-                    	o.Name=s2.left(80);
-                    }
-                    For(id idInstall:instalMap.keySet())//a voir la cardinalite pour supprime le for
-                    {
-                        instalMap.get(idInstall).ProjetVIP__c=true;
-                    }
-                }
-            	 if(isBefore&&!String.isEmpty(o.Copro_user__c)&&o.RecordType.DeveloperName=='Subscription')
-                 {
-                     if(!o.Projet_VIP__c)
-                     {
-                         String s1=recTypeIdMap.get('Subscription');
-                         String s2=s1.left(3)+' - '+accMap.get(o.accountid).Name+' - '+personAccMap.get(o.Copro_user__c).LastName+' '+personAccMap.get(o.Copro_user__c).FirstName;
-                         o.Name=s2.left(80);
-                     }
-                     if(o.Projet_VIP__c)
-                     {
-                         String s1=recTypeIdMap.get('Subscription');
-                         String s2=s1.left(3)+' - '+accMap.get(o.accountid).Name+' - ⚡ '+personAccMap.get(o.Copro_user__c).LastName+' '+personAccMap.get(o.Copro_user__c).FirstName;
-                         o.Name=s2.left(80);
-                     }
-                 }
-            	 if(isBefore&&String.isEmpty(o.Copro_user__c)&&o.RecordType.DeveloperName=='Subscription')
-                 {
-                     if(!o.Projet_VIP__c)
-                     {
-                         String s1=recTypeIdMap.get('Subscription');
-                         String s2=s1.left(3)+' - '+accMap.get(o.accountid).Name;
-                         o.Name=s2.left(80);
-                     }
-                     if(o.Projet_VIP__c)
-                     {
-                         String s1=recTypeIdMap.get('Subscription');
-                         String s2=s1.left(3)+' - ⚡ '+accMap.get(o.accountid).Name;
-                         o.Name=s2.left(80);
-                     }
-                 }	
-            	 String s1=recTypeIdMap.get('Subscription');
-                 String s2=s1.left(3)+' - '+accMap.get(o.accountid).Name;	
-            	 if(isBefore&&o.name!=s2&&o.RecordTypeId!=recTypeIdMap.get('Subscription')&&o.RecordTypeId!=recTypeIdMap.get('Subscription_B2B'))
-                 {
-                     if(o.Projet_VIP__c)
-                     {
-                         String s3=recTypeIdMap.get('Subscription');
-                         String s4=s1.left(3)+' - ⚡ '+accMap.get(o.accountid).Name;
-                         o.Name=s4.left(80);
-                     }
-                 }
-            
             /*Opp - Price Book*/
                 if(isBefore&&!mapPriceBook.isEmpty()&&!String.isEmpty(o.Pricebook2Id)&&!oldOpps.isEmpty()&&((o.Pricebook2Id!=oldOpps.get(o.id).Pricebook2Id)||String.isEmpty(o.Price_Book_Name__c)||(mapPriceBook.get(o.Pricebook2Id).Name!=o.Price_Book_Name__c)))
                 {
                     o.Price_Book_Name__c=mapPriceBook.get(o.Pricebook2Id).Name;
                 }
-                if(((o.RecordtypeId==recTypeIdMap.get('Subscription'))||(o.RecordtypeId==recTypeIdMap.get('Subscription_B2B')))&&String.isEmpty(o.Billed_to__c))
+                if(isBefore&&((o.RecordtypeId==recTypeIdMap.get('Subscription'))||(o.RecordtypeId==recTypeIdMap.get('Subscription_B2B')))&&String.isEmpty(o.Billed_to__c))
                 {
                     o.Pricebook2Id=System.Label.PriceBookId;
                 }  
@@ -495,17 +401,18 @@ public with sharing class OpportunityServices {
                 {
                     o.Pricebook2Id=System.Label.PriceBookId_3;
                 }
-            	else if(isBefore&&accMap.get(o.accountid).BillingCity=='Monaco')
+            	else if(isBefore&&!accMap.isEmpty()&&accMap.get(o.accountid).BillingCity=='Monaco')
                 {
                     o.Pricebook2Id=System.Label.PriceBookId_4;
                 }
-            	else if(isBefore&&(o.CreatedDate!=o.LastModifiedDate)&&o.Accountid!=null&&!personAccMap.isEmpty()&&!accMap.isEmpty()&&o.Billed_to__c!=null&&personAccMap.get(o.Billed_to__c).RecordType!=null&&accMap.get(o.Billed_to__c).RecordType!=null&&(personAccMap.get(o.Billed_to__c).RecordType.DeveloperName=='PersonAccount'||(accMap.get(o.Billed_to__c).RecordType.DeveloperName=='Company'&&
+            	else if(isBefore&&(o.CreatedDate!=o.LastModifiedDate)&&o.Accountid!=null&&!personAccMap.isEmpty()&&!accMap.isEmpty()&&o.Billed_to__c!=null&&accMap.containsKey(o.Billed_to__c)
+                        &&personAccMap.containsKey(o.Billed_to__c)&&personAccMap.get(o.Billed_to__c).RecordType!=null&&accMap.get(o.Billed_to__c).RecordType!=null&&(personAccMap.get(o.Billed_to__c).RecordType.DeveloperName=='PersonAccount'||(accMap.get(o.Billed_to__c).RecordType.DeveloperName=='Company'&&
                      accMap.get(o.Billed_to__c).is_SCI__c))&&!o.CITE_2019__c&&!o.HasOpportunityLineItem&&((o.Mise_en_service__c>date.newinstance(2019, 12, 31))||o.Mise_en_service__c==null)
                         &&accMap.get(o.Accountid).Copro_age__c=='Neuf'&&(o.RecordtypeId==recTypeIdMap.get('Subscription_B2B')||o.RecordtypeId==recTypeIdMap.get('Subscription'))) 
                 {
                     o.Pricebook2Id=System.Label.PriceBookId_5;
                 }
-            	else if(isBefore&&(o.RecordtypeId==recTypeIdMap.get('Subscription')||o.RecordtypeId==recTypeIdMap.get('Subscription_B2B'))&&(accMap.get(o.Billed_to__c).RecordType.DeveloperName=='PersonAccount'||
+            	else if(isBefore&&(o.RecordtypeId==recTypeIdMap.get('Subscription')||o.RecordtypeId==recTypeIdMap.get('Subscription_B2B'))&&!accMap.isEmpty()&&(accMap.get(o.Billed_to__c).RecordType.DeveloperName=='PersonAccount'||
                         (accMap.get(o.Billed_to__c).RecordType.DeveloperName=='Company'&&accMap.get(o.Billed_to__c).is_SCI__c))&&personAccMap.get(o.Billed_to__c).RecordType.DeveloperName=='PersonAccount'&&
                        accMap.get(o.Accountid).Copro_age__c=='Ancien'&&!o.CITE_2019__c&&!o.HasOpportunityLineItem) 
                 {
@@ -516,8 +423,45 @@ public with sharing class OpportunityServices {
                     o.Pricebook2Id=System.Label.PriceBookId_7;
                 }
             
-
-           
+           /*[Opp] Mis à jour statut Quote*/
+                if(isBefore&&o.Opp_Installation_approuv_e__c)
+                    mapPrimaryQuote.get(o.Primary_Quote__c).zqu__ApprovalStatus__c='Approved';
+           /*Opp - Update External Transaction*/
+                 if(o.StageName=='Installation'&&!String.isEmpty(o.External_Transaction__c))
+                 {
+                     mapExternalTransaction.get(o.External_Transaction__c).Status__c='Signed';
+                 }
+            	 if(((o.StageName=='Offre refusée')||(o.StageName=='Stand by')||(o.StageName=='Résilié'))&&!String.isEmpty(o.External_Transaction__c))
+                 {
+                     mapExternalTransaction.get(o.External_Transaction__c).Status__c='Canceled';
+                 }	
+            	 if(o.StageName=='Service activé'&&!String.isEmpty(o.External_Transaction__c))
+                 {
+                     mapExternalTransaction.get(o.External_Transaction__c).Status__c='Completed';
+                 }
+            /*Opp - Auto Fill Commmunity Account for PA*/
+				 if(!String.isEmpty(o.Copro_user__c)&&!String.isEmpty(o.Billed_to__c)&&!String.isEmpty(o.Subscription_Billed_to__c)&&personAccMap.get(o.Copro_user__c).RecordType.DeveloperName=='PersonAccount'&&
+                   o.Subscription_Billed_to__c==o.Copro_user__c&&(o.StageName=='Installation'||o.StageName=='Service activé'))
+                 {
+                     personAccMap.get(o.Copro_user__c).Community_account__c=personAccMap.get(o.Copro_user__c).Copro_PersonAccount__c;
+                 }
+            	 if(!String.isEmpty(o.Copro_user__c)&&!String.isEmpty(o.Billed_to__c)&&!accMap.isEmpty()&&accMap.containsKey(o.Subscription_Billed_to__c)&&accMap.get(o.Subscription_Billed_to__c).RecordTypeId==recTypeIdMap.get('Company')
+                    &&(o.StageName=='Installation'||o.StageName=='Service activé')&&personAccMap.containsKey(o.Copro_user__c))
+                 {
+                     personAccMap.get(o.Copro_user__c).Community_account__c=o.Subscription_Billed_to__c;
+                 }
+            /*Opp - Create Contact Role*/	
+            	 if(o.RecordTypeId==recTypeIdMap.get('Convention_Copro')&&!accMap.isEmpty()&&!String.isEmpty(accMap.get(o.Accountid).Gestionnaire__c))
+                 {
+                     if(o.id != null && accMap.get(o.Accountid).Gestionnaire__c != null){
+                         system.debug('gestionnaire : ' +accMap.get(o.Accountid).Gestionnaire__c + 'Opp RT : ' +o.RecordTypeId + 'o.id : ' +o.id);
+                          OpportunityContactRole OppContactRole=new OpportunityContactRole(ContactId=accMap.get(o.Accountid).Gestionnaire__c,OpportunityId=o.id,Role='Gestionnnaire');
+                          system.debug('OppContactROLE : ' +OppContactRole);
+                         OppContactRoleList.add(OppContactRole);
+                     }
+                 }
+            
+            
             
            } 
         if(!isBefore)
@@ -528,9 +472,10 @@ public with sharing class OpportunityServices {
             update mapPrimaryQuote.values();
             update mapExternalTransaction.values();
             update mapVehicleEntry.values();
-            update OppContactRoleList;
+            insert OppContactRoleList;
         }
         
+    
     }
     
     public static void AboB2Brename(List<Opportunity> newOpps,Map<Id,Opportunity> oldOpps)
